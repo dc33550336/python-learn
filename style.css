@@ -688,24 +688,102 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.5); background-clip: content-box; }
 
 /* ---------- 移动端 ---------- */
+/* 手机端：顶部品牌条 + 底部应用栏（类 App 体验） */
 @media (max-width: 820px) {
+  html { -webkit-text-size-adjust: 100%; }
+  * { -webkit-tap-highlight-color: transparent; }
+  pre, .pg-out, .q-code, textarea, .content { -webkit-overflow-scrolling: touch; }
+
   .app { flex-direction: column; }
   .sidebar {
     width: 100%; flex: none; flex-direction: row; align-items: center;
-    padding: 10px 12px; overflow-x: auto; gap: 4px;
+    padding: 10px 14px; overflow: visible; gap: 4px;
     border-right: none; border-bottom: 1px solid var(--border);
   }
-  .logo { padding: 0 8px 0 2px; font-size: 15px; }
-  .logo .dot { width: 30px; height: 30px; font-size: 15px; }
+  .logo { padding: 0; font-size: 16px; }
+  .logo .dot { width: 32px; height: 32px; font-size: 16px; }
   .logo small, .side-foot { display: none; }
-  .nav { flex-direction: row; }
-  .nav-item { padding: 8px 10px; white-space: nowrap; font-size: 13px; }
-  .nav-item .lbl { display: none; }
-  .content { padding: 18px 16px 60px; }
-  .hero { padding: 30px 24px; }
+
+  /* 底部应用栏 */
+  .nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    flex-direction: row; justify-content: space-around;
+    background: rgba(15, 10, 32, 0.94);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border);
+    padding: 5px 2px calc(5px + env(safe-area-inset-bottom));
+  }
+  .nav-item {
+    position: relative; flex: 1; justify-content: center;
+    padding: 9px 2px; font-size: 12px;
+    border: none; border-radius: 10px;
+    white-space: nowrap;
+  }
+  .nav-item .lbl { display: block; }
+  .nav-item .badge {
+    position: absolute; top: 0; right: calc(50% - 24px);
+    padding: 1px 6px; font-size: 10px;
+  }
+
+  .topbar { padding: 10px 14px; gap: 10px; }
+  .crumb { display: none; }
+  .xp-pill, .streak-pill { padding: 6px 11px; font-size: 12px; }
+  .xp-pill .bar { width: 46px; }
+
+  .content { padding: 16px 14px calc(86px + env(safe-area-inset-bottom)); }
+
+  .hero { padding: 28px 22px; border-radius: 24px; }
   .hero h1 { font-size: 30px; }
   .hero .float-chip { display: none; }
-  .hero p { font-size: 14.5px; }
+  .hero p { font-size: 14.5px; line-height: 1.9; }
+  .hero .cta .btn { padding: 12px 20px; font-size: 14.5px; }
+  .hero-title-row { gap: 10px; margin-top: 16px; }
+
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .stat { padding: 15px 16px; border-radius: 16px; gap: 12px; }
+  .stat .num { font-size: 23px; }
+  .ring-wrap { width: 64px; height: 64px; flex-basis: 64px; }
+  .ring-wrap svg { width: 64px; height: 64px; }
+  .ring-txt { font-size: 15px; }
+
+  .section-title { font-size: 14.5px; margin: 26px 0 12px; }
+  .chapter-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+
+  .block p { font-size: 14.5px; line-height: 1.9; }
+  .code-wrap pre { font-size: 12.5px; padding: 13px 14px; }
+  .lesson-head .big-ic { width: 52px; height: 52px; font-size: 22px; border-radius: 15px; }
+  .lesson-head h2 { font-size: 22px; }
+
+  /* 练习场：全屏底部弹层 */
+  #playground {
+    left: 0; right: 0; bottom: 0; transform: none;
+    width: 100%; max-height: 92vh;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: none;
+  }
+  #playground.open { display: flex; }
+  #playground .pg-editor textarea { height: 30vh; }
+  .pg-out { min-height: 26vh; max-height: 40vh; }
+  .pg-head { padding: 10px 12px; }
+  .pg-head select { max-width: 150px; }
+  .chat-demo .chat-win { height: 46vh; }
+  .demo { padding: 14px; }
+  .if-demo, .flow { gap: 14px; }
+  .flow .node { padding: 9px 12px; }
+}
+
+@media (max-width: 480px) {
+  .hero { padding: 22px 18px; }
+  .hero h1 { font-size: 26px; }
+  .hero-badge { font-size: 12px; padding: 6px 12px; }
+  .creator { font-size: 12px; padding: 5px 11px; }
+  .stats { gap: 10px; }
+  .stat { padding: 13px 14px; }
+  .stat .num { font-size: 21px; }
+  .btn { padding: 10px 16px; font-size: 13.5px; }
+  .q-opt { padding: 12px 13px; font-size: 14px; }
+  .pg-actions .mini-hint { display: none; }
 }
 
 /* ---------- 封面徽章 ---------- */
