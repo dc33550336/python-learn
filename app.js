@@ -804,7 +804,7 @@
     else if (page === 'cheats') { renderCheats(); setActiveNav('cheats'); updateTopbar('速查卡'); }
     else if (page === 'ai') { renderAI(); setActiveNav('ai'); updateTopbar('AI 专区'); }
     else { renderHome(); setActiveNav('home'); updateTopbar('首页'); }
-    view().scrollTop = 0;
+    window.scrollTo(0, 0);
   }
 
   /* ---------------- 事件委托 ---------------- */
