@@ -57,6 +57,28 @@
   const SRS_DAYS = [1, 3, 7, 21];
   const LEVELS = ['初学者', '新手上路', '小试牛刀', '渐入佳境', 'Python 学徒', '代码行者', 'AI 玩家', '编程高手', '大师之路', '传奇人物'];
 
+  /* ---------------- 题库合并 ---------------- */
+  function normBank(arr, cat) {
+    return (arr || []).map(function (q) {
+      return { cat: cat, q: q.q, options: q.o, answer: q.a, explain: q.e, d: q.d };
+    });
+  }
+  const BANKS = {
+    py: normBank(typeof QUIZ_PY !== 'undefined' ? QUIZ_PY : [], 'py'),
+    ai: normBank(typeof QUIZ_AI !== 'undefined' ? QUIZ_AI : [], 'ai'),
+    pc: normBank(typeof QUIZ_PC !== 'undefined' ? QUIZ_PC : [], 'pc')
+  };
+  const BANK_META = [
+    { key: 'py', name: 'Python 编程', tile: 'PY', desc: 'print、变量、条件、循环、列表、字典、函数', color: '#a78bfa' },
+    { key: 'ai', name: 'AI 知识', tile: 'AI', desc: '大模型、提示词、机器学习、AI 应用与安全', color: '#67e8f9' },
+    { key: 'pc', name: '电脑基础', tile: 'PC', desc: '硬件、系统、网络、安全、效率技巧', color: '#34d399' }
+  ];
+  const ALL_QUIZ = [].concat(
+    DATA.quizzes.map(function (q) { return Object.assign({ cat: 'py' }, q); }),
+    BANKS.py, BANKS.ai, BANKS.pc
+  );
+  function bankSize(key) { return (BANKS[key] || []).length; }
+
   function chState(id) { return S.chapters[id] || { stage: 0 }; }
   const isLearned = (id) => chState(id).stage >= 1;
   const isMastered = (id) => chState(id).stage >= 5;
@@ -372,13 +394,19 @@
     }
   }
 
+  function scrollToEl(el, block) {
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: block || 'start' });
+    }
+  }
+
   function openPlayground(code) {
     const pg = $('#playground');
     $('#pgCode').value = code;
     pg.style.display = 'flex';
     pg.classList.add('open');
     runCode(code);
-    $('#pgCode').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    scrollToEl($('#pgCode'), 'nearest');
   }
   function closePlayground() {
     $('#playground').style.display = 'none';
@@ -428,6 +456,7 @@
     if (opts.n) qs = qs.slice(0, opts.n);
     let i = 0, correct = 0;
     const total = qs.length;
+    const byCat = {};
 
     function finish() {
       const pass = correct / total >= 0.6;
@@ -435,7 +464,12 @@
       S.totalAnswered += total;
       S.correctAnswered += correct;
       save();
-      if (opts.onFinish) opts.onFinish(correct, total, pass);
+      if (opts.finishRenderer) {
+        opts.finishRenderer(container, correct, total, pass, byCat);
+        if (pass) confetti();
+        return;
+      }
+      if (opts.onFinish) opts.onFinish(correct, total, pass, byCat);
       let html = '<div class="quiz-done">' +
         '<div class="big">' + (pass ? '🎉' : '💪') + '</div>' +
         '<h3>' + (pass ? '太棒了！' : '别灰心，再来一次') + '</h3>' +
@@ -478,6 +512,11 @@
           const chosen = +opt.dataset.i;
           const isRight = chosen === q.answer;
           if (isRight) correct++;
+          if (q.cat) {
+            byCat[q.cat] = byCat[q.cat] || { c: 0, t: 0 };
+            byCat[q.cat].t++;
+            if (isRight) byCat[q.cat].c++;
+          }
           options.forEach(function (o) {
             o.classList.add('disabled');
             if (+o.dataset.i === q.answer) o.classList.add('correct');
@@ -545,7 +584,7 @@
       '<p>' + renderInline('从高一信息课学过的 `print`、变量、`if` 出发，一路写到会聊天的「规则版小 AI」——5 章 · 约 40 分钟，配练习与自动复习，接轨 AI 时代。') + '</p>' +
       '<div class="cta">' +
       '<button class="btn primary" data-nav="' + (nextCh ? 'ch/' + nextCh.id : 'review') + '">' + (nextCh ? '继续学习' : '去复习') + '</button>' +
-      '<button class="btn" data-nav="practice">综合练习</button>' +
+      '<button class="btn" data-nav="practice">水平测试</button>' +
       '<button class="btn" data-nav="ai">AI 专区</button>' +
       (isHttp ? '<button class="btn" data-share>分享给同学</button>' : '') +
       '</div></div>' +
@@ -624,16 +663,129 @@
     });
   }
 
+  /* ---------------- 训练中心 ---------------- */
+  function pickLevelPool() {
+    const out = [];
+    BANK_META.forEach(function (m) {
+      const tagged = BANKS[m.key].map(function (q) { return Object.assign({ cat: m.key }, q); });
+      [1, 2, 3].forEach(function (d) {
+        const sub = shuffle(tagged.filter(function (q) { return q.d === d; })).slice(0, 2);
+        out.push.apply(out, sub);
+      });
+    });
+    return shuffle(out); // 每科 6 题 = 18 题
+  }
+
+  function levelLabel(key, c, t) {
+    const pct = t ? c / t : 0;
+    if (key === 'py') return pct >= 0.83 ? '进阶' : (pct >= 0.5 ? '基础扎实' : '入门');
+    if (key === 'ai') return pct >= 0.83 ? 'AI 玩家' : (pct >= 0.5 ? 'AI 了解者' : 'AI 新手');
+    return pct >= 0.83 ? '电脑高手' : (pct >= 0.5 ? '比较熟练' : '新手');
+  }
+
+  function renderLevelResult(container, byCat, correct, total) {
+    const rows = BANK_META.map(function (m) {
+      const b = byCat[m.key] || { c: 0, t: 0 };
+      const pct = b.t ? Math.round(b.c / b.t * 100) : 0;
+      return '<div class="res-row">' +
+        '<div class="res-name" style="color:' + m.color + '">' + m.name + '</div>' +
+        '<div class="res-bar"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="res-val">' + b.c + '/' + b.t + ' · ' + levelLabel(m.key, b.c, b.t) + '</div></div>';
+    });
+    // 找出最弱的一科给建议
+    let weakest = BANK_META[0];
+    BANK_META.forEach(function (m) {
+      const b = byCat[m.key] || { c: 0, t: 0 };
+      const wp = weakest && byCat[weakest.key] ? byCat[weakest.key].c / Math.max(1, byCat[weakest.key].t) : 1;
+      if (b.t && b.c / b.t < wp) weakest = m;
+    });
+    const adv = weakest.key === 'py' ? '你的 Python 基础最需要补——去「Python 专项」刷题，再配合 5 章课程效果更好。'
+      : weakest.key === 'ai' ? '你的 AI 知识最需要补——去「AI 专项」刷题，并打开「AI 专区」学大模型概念。'
+      : '你的电脑基础最需要补——去「电脑基础专项」刷题，平时多摆弄系统设置会进步很快。';
+    container.innerHTML =
+      '<div class="quiz-done">' +
+      '<div class="big">🧭</div>' +
+      '<h3>你的水平测试结果</h3>' +
+      '<p style="margin-bottom:6px">共 18 题（每科 6 题）· 答对 ' + correct + ' / ' + total + ' · +' + (correct * 10) + ' XP</p>' +
+      '<div class="res-panel">' + rows.join('') + '</div>' +
+      '<div class="res-advice">💡 ' + adv + '</div>' +
+      '<div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+      '<button class="btn sm" data-train="level">再测一次</button>' +
+      '<button class="btn sm primary" data-train="' + weakest.key + '">去 ' + weakest.name + ' 专项</button>' +
+      '<button class="btn sm" data-train="mixed">综合随机</button>' +
+      '</div></div>';
+  }
+
+  function startLevelTest() {
+    startQuiz($('#quizBox'), {
+      pool: pickLevelPool(), mode: 'level', goto: 'practice',
+      finishRenderer: function (container, correct, total, pass, byCat) {
+        renderLevelResult(container, byCat, correct, total);
+      }
+    });
+    scrollToEl($('#quizBox'));
+  }
+
+  function showTrainConfig(mode) {
+    const meta = BANK_META.find(function (m) { return m.key === mode; });
+    const title = meta ? meta.name + ' 专项' : (mode === 'mixed' ? '综合随机' : '');
+    const cfg = $('#trainConfig');
+    cfg.innerHTML = '<div class="card train-config" style="margin-top:14px">' +
+      '<div class="cfg-title">' + title + ' · 选择难度和题量</div>' +
+      '<div class="cfg-row"><span>难度</span><select id="cfgDiff">' +
+      '<option value="0">全部</option><option value="1">简单</option><option value="2">中等</option><option value="3">困难</option></select></div>' +
+      '<div class="cfg-row"><span>题量</span><select id="cfgNum">' +
+      '<option value="10">10 题</option><option value="20">20 题</option><option value="30" selected>30 题</option><option value="50">50 题</option></select></div>' +
+      '<button class="btn primary" data-start="' + mode + '">开始训练</button></div>';
+    scrollToEl(cfg, 'nearest');
+  }
+
+  function startTraining(mode) {
+    const diff = +($('#cfgDiff') ? $('#cfgDiff').value : 0);
+    const num = +($('#cfgNum') ? $('#cfgNum').value : 30);
+    let pool = mode === 'mixed' ? ALL_QUIZ : ALL_QUIZ.filter(function (q) { return q.cat === mode; });
+    if (diff) pool = pool.filter(function (q) { return q.d === diff; });
+    if (!pool.length) { toast('这个条件下没有题目，换换难度吧'); return; }
+    pool = shuffle(pool).slice(0, num);
+    startQuiz($('#quizBox'), { pool: pool, mode: 'train', goto: 'practice' });
+    scrollToEl($('#quizBox'));
+  }
+
   function renderPractice() {
     view().innerHTML =
       '<div class="view">' +
       '<div class="lesson-head">' +
-      '<div><h2>综合练习</h2><div class="meta"><span class="chip">' + DATA.quizzes.length + ' 题</span><span class="chip">全部章节混合</span><span class="chip">每题 +10 XP</span></div></div></div>' +
-      '<p style="color:var(--text-dim);font-size:14.5px;line-height:1.9;margin:10px 0 4px">把所有章节的题目打乱来一轮，检验一下真正的掌握程度。答对 60% 以上算通过。</p>' +
-      '<div class="quiz-box" id="quizBox" style="margin-top:14px"></div></div>';
-    startQuiz($('#quizBox'), {
-      pool: DATA.quizzes, mode: 'practice', goto: 'home'
-    });
+      '<div><h2>训练中心</h2><div class="meta">' +
+      '<span class="chip">' + ALL_QUIZ.length + ' 道题</span><span class="chip">3 大科目</span><span class="chip">每题 +10 XP</span>' +
+      '</div></div></div>' +
+      '<p style="color:var(--text-dim);font-size:14.5px;line-height:1.9;margin:10px 0 4px">先做「水平测试」测出你的 Python / AI / 电脑水平，再按科目针对性刷题。</p>' +
+
+      '<div class="section-title">水平测试</div>' +
+      '<div class="train-card level" data-train="level">' +
+      '<div class="t-tile" style="background:linear-gradient(135deg,#fbbf24,#f472b6)">测</div>' +
+      '<div class="t-body"><div class="t-name">AI 时代水平测试</div>' +
+      '<div class="t-desc">18 题 · 每科 6 题 · 测完给出三科评级和学习建议</div></div>' +
+      '<div class="t-go">开始 →</div></div>' +
+
+      '<div class="section-title">专项训练</div>' +
+      '<div class="train-grid">' + BANK_META.map(function (m) {
+        return '<div class="train-card" data-train="' + m.key + '">' +
+          '<div class="t-tile" style="background:linear-gradient(135deg,' + m.color + ',#6d28d9)">' + m.tile + '</div>' +
+          '<div class="t-body"><div class="t-name">' + m.name + '</div>' +
+          '<div class="t-desc">' + m.desc + ' · ' + bankSize(m.key) + ' 题</div></div>' +
+          '<div class="t-go">去刷题 →</div></div>';
+      }).join('') + '</div>' +
+
+      '<div class="section-title">综合随机</div>' +
+      '<div class="train-card mixed" data-train="mixed">' +
+      '<div class="t-tile" style="background:linear-gradient(135deg,#67e8f9,#8b5cf6)">混</div>' +
+      '<div class="t-body"><div class="t-name">全科目随机</div>' +
+      '<div class="t-desc">Python + AI + 电脑基础混合出题，检验综合水平</div></div>' +
+      '<div class="t-go">开始 →</div></div>' +
+
+      '<div id="trainConfig"></div>' +
+      '<div class="quiz-box" id="quizBox" style="margin-top:14px"></div>' +
+      '</div>';
   }
 
   function renderReview() {
@@ -748,7 +900,7 @@
   const NAV = [
     { id: 'home', label: '首页' },
     { id: 'course', label: '课程' },
-    { id: 'practice', label: '练习' },
+    { id: 'practice', label: '训练' },
     { id: 'review', label: '复习' },
     { id: 'cheats', label: '速查卡' },
     { id: 'ai', label: 'AI 专区' }
@@ -796,7 +948,7 @@
       setActiveNav('course');
       updateTopbar(chFound ? '课程 · ' + chFound.title : '课程');
     }
-    else if (page === 'practice') { renderPractice(); setActiveNav('practice'); updateTopbar('综合练习'); }
+    else if (page === 'practice') { renderPractice(); setActiveNav('practice'); updateTopbar('训练中心'); }
     else if (page === 'review') {
       if (parts[1] === 'quiz' && parts[2]) { renderReviewQuiz(parts[2]); setActiveNav('review'); updateTopbar('复习 · 小测'); }
       else { renderReview(); setActiveNav('review'); updateTopbar('复习中心'); }
@@ -829,6 +981,16 @@
     if (e.target.closest('[data-open-pg]')) { openPlayground(EXAMPLES[0].code); return; }
     const rv = e.target.closest('[data-review]');
     if (rv) { location.hash = '#/review/quiz/' + rv.dataset.review; return; }
+    const train = e.target.closest('[data-train]');
+    if (train) {
+      const mode = train.dataset.train;
+      if (mode === 'level') startLevelTest();
+      else if (mode === 'mixed') showTrainConfig('mixed');
+      else showTrainConfig(mode);
+      return;
+    }
+    const startBtn = e.target.closest('[data-start]');
+    if (startBtn) { startTraining(startBtn.dataset.start); return; }
   });
 
   /* ---------------- 礼花与提示 ---------------- */
